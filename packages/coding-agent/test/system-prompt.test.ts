@@ -86,6 +86,58 @@ describe("buildSystemPrompt", () => {
 		});
 	});
 
+	describe("custom prompt interpolation", () => {
+		test("interpolates ${toolsList} into custom prompt", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "Tools:\n${toolsList}",
+				selectedTools: ["read"],
+				toolSnippets: { read: "Read file contents" },
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).toContain("- read: Read file contents");
+			expect(prompt).not.toContain("${toolsList}");
+		});
+
+		test("interpolates ${guidelines} into custom prompt", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "Rules:\n${guidelines}",
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).toContain("- Be concise");
+			expect(prompt).not.toContain("${guidelines}");
+		});
+
+		test("interpolates ${readmePath}, ${docsPath}, ${examplesPath} into custom prompt", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "Docs: ${readmePath} / ${docsPath} / ${examplesPath}",
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).not.toContain("${readmePath}");
+			expect(prompt).not.toContain("${docsPath}");
+			expect(prompt).not.toContain("${examplesPath}");
+		});
+
+		test("leaves unknown variables unchanged in custom prompt", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "Hello ${unknown} world",
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).toContain("${unknown}");
+		});
+	});
+
 	describe("prompt guidelines", () => {
 		test("appends promptGuidelines to default guidelines", () => {
 			const prompt = buildSystemPrompt({
