@@ -68,6 +68,8 @@ const KIMI_STATIC_HEADERS = {
 	"User-Agent": "KimiCLI/1.5",
 } as const;
 
+const MOONSHOT_CN_MIRRORED_MODEL_IDS = new Set(["kimi-k2.7-code", "kimi-k2.7-code-highspeed"]);
+
 const TOGETHER_BASE_URL = "https://api.together.ai/v1";
 const TOGETHER_BASE_COMPAT: OpenAICompletionsCompat = {
 	supportsStore: false,
@@ -92,7 +94,6 @@ const TOGETHER_TOGGLE_REASONING_EFFORT_COMPAT: OpenAICompletionsCompat = {
 };
 const TOGETHER_REASONING_ONLY_MODELS = new Set([
 	"deepseek-ai/DeepSeek-R1",
-	"MiniMaxAI/MiniMax-M2.5",
 	"MiniMaxAI/MiniMax-M2.7",
 ]);
 const TOGETHER_REASONING_EFFORT_MODELS = new Set(["openai/gpt-oss-20b", "openai/gpt-oss-120b"]);
@@ -188,6 +189,23 @@ const OPENAI_RESPONSES_NONE_REASONING_MODELS = new Set([
 	"gpt-5.5",
 ]);
 
+const OPENCODE_OPENAI_COMPLETIONS_LONG_CACHE_RETENTION_UNSUPPORTED_MODELS = new Set([
+	"opencode:deepseek-v4-flash",
+	"opencode:deepseek-v4-pro",
+	"opencode:kimi-k2.5",
+	"opencode:kimi-k2.6",
+	"opencode:minimax-m2.7",
+	"opencode-go:kimi-k2.6",
+]);
+
+// Checked manually against the authenticated GitHub Copilot /models endpoint on 2026-06-15.
+// Keep this to narrow corrections over models.dev metadata instead of snapshotting Copilot's catalog.
+const GITHUB_COPILOT_THINKING_LEVEL_OVERRIDES = {
+	"claude-opus-4.7": { minimal: "low" },
+	"claude-opus-4.8": { minimal: "low" },
+	"claude-sonnet-4.6": { minimal: "low", xhigh: "max" },
+} satisfies Record<string, NonNullable<Model<Api>["thinkingLevelMap"]>>;
+
 function mergeThinkingLevelMap(model: Model<any>, map: NonNullable<Model<any>["thinkingLevelMap"]>): void {
 	model.thinkingLevelMap = { ...model.thinkingLevelMap, ...map };
 }
@@ -233,7 +251,8 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 		modelId.includes("opus-4-8") ||
 		modelId.includes("opus-4.8") ||
 		modelId.includes("sonnet-4-6") ||
-		modelId.includes("sonnet-4.6")
+		modelId.includes("sonnet-4.6") ||
+		modelId.includes("fable-5")
 	);
 }
 
@@ -295,6 +314,12 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
+	if (
+		(model.api === "anthropic-messages" || model.api === "bedrock-converse-stream") &&
+		model.id.includes("fable-5")
+	) {
+		mergeThinkingLevelMap(model, { off: null, xhigh: "xhigh" });
+	}
 	if (model.api === "anthropic-messages" && isAnthropicAdaptiveThinkingModel(model.id)) {
 		mergeAnthropicMessagesCompat(model, { forceAdaptiveThinking: true });
 	}
@@ -324,6 +349,15 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (model.provider === "openai-codex" && supportsOpenAiXhigh(model.id)) {
 		mergeThinkingLevelMap(model, { minimal: "low" });
 	}
+	if (
+		(model.provider === "moonshotai" || model.provider === "moonshotai-cn") &&
+		(model.id === "kimi-k2.7-code" || model.id === "kimi-k2.7-code-highspeed")
+	) {
+		// Kimi K2.7 Code is always-thinking. Official docs say
+		// `thinking: { type: "disabled" }` is rejected, and callers can omit
+		// the thinking parameter to use the enabled default.
+		mergeThinkingLevelMap(model, { off: null });
+	}
 	if (model.provider === "openrouter" && model.id.startsWith("inception/mercury-2")) {
 		// Mercury 2 in instant mode (reasoning_effort: "none") disables tool calling.
 		// Mark "off" unsupported so the openai-completions provider omits the reasoning param
@@ -342,6 +376,12 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (model.provider === "ant-ling" && model.reasoning) {
 		// Ring reasons by default. Only high/xhigh have documented explicit effort controls.
 		mergeThinkingLevelMap(model, ANT_LING_RING_THINKING_LEVEL_MAP);
+	}
+	if (model.provider === "github-copilot") {
+		const override = GITHUB_COPILOT_THINKING_LEVEL_OVERRIDES[model.id];
+		if (override) {
+			mergeThinkingLevelMap(model, override);
+		}
 	}
 }
 
@@ -364,6 +404,10 @@ function getBedrockBaseUrl(modelId: string): string {
 
 function normalizeNvidiaModelId(modelId: string): string {
 	return modelId.toLowerCase().replaceAll("_", ".");
+}
+
+function roundCost(value: number): number {
+	return Number(value.toFixed(6));
 }
 
 async function fetchNvidiaNimModelIds(): Promise<Map<string, string>> {
@@ -411,10 +455,10 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 			}
 
 			// Convert pricing from $/token to $/million tokens
-			const inputCost = parseFloat(model.pricing?.prompt || "0") * 1_000_000;
-			const outputCost = parseFloat(model.pricing?.completion || "0") * 1_000_000;
-			const cacheReadCost = parseFloat(model.pricing?.input_cache_read || "0") * 1_000_000;
-			const cacheWriteCost = parseFloat(model.pricing?.input_cache_write || "0") * 1_000_000;
+			const inputCost = roundCost(parseFloat(model.pricing?.prompt || "0") * 1_000_000);
+			const outputCost = roundCost(parseFloat(model.pricing?.completion || "0") * 1_000_000);
+			const cacheReadCost = roundCost(parseFloat(model.pricing?.input_cache_read || "0") * 1_000_000);
+			const cacheWriteCost = roundCost(parseFloat(model.pricing?.input_cache_write || "0") * 1_000_000);
 
 			const normalizedModel: Model<any> = {
 				id: modelKey,
@@ -470,10 +514,10 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
 				input.push("image");
 			}
 
-			const inputCost = toNumber(model.pricing?.input) * 1_000_000;
-			const outputCost = toNumber(model.pricing?.output) * 1_000_000;
-			const cacheReadCost = toNumber(model.pricing?.input_cache_read) * 1_000_000;
-			const cacheWriteCost = toNumber(model.pricing?.input_cache_write) * 1_000_000;
+			const inputCost = roundCost(toNumber(model.pricing?.input) * 1_000_000);
+			const outputCost = roundCost(toNumber(model.pricing?.output) * 1_000_000);
+			const cacheReadCost = roundCost(toNumber(model.pricing?.input_cache_read) * 1_000_000);
+			const cacheWriteCost = roundCost(toNumber(model.pricing?.input_cache_write) * 1_000_000);
 
 			models.push({
 				id: model.id,
@@ -1058,6 +1102,17 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					}
 				}
 
+				if (api === "openai-completions") {
+					compat = { ...(compat ?? {}), maxTokensField: "max_tokens" };
+					if (
+						OPENCODE_OPENAI_COMPLETIONS_LONG_CACHE_RETENTION_UNSUPPORTED_MODELS.has(
+							`${variant.provider}:${modelId}`,
+						)
+					) {
+						compat = { ...compat, supportsLongCacheRetention: false };
+					}
+				}
+
 				models.push({
 					id: modelId,
 					name: m.name || modelId,
@@ -1216,13 +1271,29 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			supportsReasoningEffort: false,
 			maxTokensField: "max_tokens",
 			supportsStrictMode: false,
+			thinkingFormat: "deepseek",
+		};
+		const getMoonshotProviderModels = (key: "moonshotai" | "moonshotai-cn"): Record<string, ModelsDevModel> => {
+			const providerModels = data[key]?.models as Record<string, ModelsDevModel> | undefined;
+			return providerModels ? { ...providerModels } : {};
+		};
+		const moonshotModels = {
+			moonshotai: getMoonshotProviderModels("moonshotai"),
+			"moonshotai-cn": getMoonshotProviderModels("moonshotai-cn"),
 		};
 
-		for (const { key, provider, baseUrl } of moonshotVariants) {
-			if (!data[key]?.models) continue;
+		// models.dev can lag the CN catalog while the global Moonshot catalog already
+		// has the model. Mirror selected current model IDs into moonshotai-cn until
+		// upstream CN metadata catches up.
+		for (const modelId of MOONSHOT_CN_MIRRORED_MODEL_IDS) {
+			const model = moonshotModels.moonshotai[modelId];
+			if (model && !moonshotModels["moonshotai-cn"][modelId]) {
+				moonshotModels["moonshotai-cn"][modelId] = model;
+			}
+		}
 
-			for (const [modelId, model] of Object.entries(data[key].models)) {
-				const m = model as ModelsDevModel;
+		for (const { key, provider, baseUrl } of moonshotVariants) {
+			for (const [modelId, m] of Object.entries(moonshotModels[key])) {
 				if (m.tool_call !== true) continue;
 
 				models.push({
@@ -1353,6 +1424,11 @@ async function generateModels() {
 		}
 		if (candidate.provider === "openai" && (candidate.id === "gpt-5.4" || candidate.id === "gpt-5.5")) {
 			candidate.contextWindow = 272000;
+			candidate.maxTokens = 128000;
+		}
+		// models.dev reports gpt-5-pro output as 272000 (a duplicate of the input sub-limit);
+		// the actual max output is 128000. Also propagates to the derived Azure clone.
+		if (candidate.provider === "openai" && candidate.id === "gpt-5-pro") {
 			candidate.maxTokens = 128000;
 		}
 		// Keep selected OpenRouter model metadata stable until upstream settles.
@@ -2053,6 +2129,12 @@ async function generateModels() {
 	];
 	allModels.push(...vertexModels);
 
+	// Azure Foundry deploys these with larger context windows than OpenAI's own API,
+	// which caps gpt-5.4/gpt-5.5 at 272k. See models-sold-directly-by-azure docs.
+	const AZURE_CONTEXT_WINDOW_OVERRIDES: Record<string, number> = {
+		"gpt-5.4": 1050000,
+		"gpt-5.5": 1050000,
+	};
 	const azureOpenAiModels: Model<Api>[] = allModels
 		.filter((model) => model.provider === "openai" && model.api === "openai-responses")
 		.map((model) => ({
@@ -2060,6 +2142,7 @@ async function generateModels() {
 			api: "azure-openai-responses",
 			provider: "azure-openai-responses",
 			baseUrl: "",
+			contextWindow: AZURE_CONTEXT_WINDOW_OVERRIDES[model.id] ?? model.contextWindow,
 		}));
 	allModels.push(...azureOpenAiModels);
 
