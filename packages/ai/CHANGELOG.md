@@ -2,8 +2,78 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- The root entrypoint (`@earendil-works/pi-ai`) is now core-only and side-effect free. The old global API moved to the temporary `@earendil-works/pi-ai/compat` entrypoint, a strict superset of the root: switching a file's import path is the only migration step. Moved symbols include `stream`/`complete`/`streamSimple`/`completeSimple`, `getModel`/`getModels`/`getProviders` (now deprecated aliases of `getBuiltinModel`/`getBuiltinModels`/`getBuiltinProviders` from `@earendil-works/pi-ai/providers/all`), `registerApiProvider`/`unregisterApiProviders`/`resetApiProviders`/`getApiProvider`, `getEnvApiKey`/`findEnvKeys`, `setBedrockProviderModule`, the per-API lazy stream wrappers (`anthropicMessagesApi`, ...), and the image-generation API.
+- Renamed the `Provider` type to `ProviderId`. `Provider` now names the runtime provider interface (id, name, auth, model listing, stream behavior).
+- API implementation modules moved from `src/providers/` to `@earendil-works/pi-ai/api/*`, renamed by API id (`anthropic` -> `api/anthropic-messages`, `google` -> `api/google-generative-ai`, `mistral` -> `api/mistral-conversations`, `amazon-bedrock` -> `api/bedrock-converse-stream`), each exporting exactly `stream` and `streamSimple`. The old per-impl export names (`streamAnthropic`, `streamSimpleAnthropic`, ...) are gone; the legacy package subpaths (`./anthropic`, `./google`, ...) keep working and point at the new modules.
+
+### Added
+
+- New `Models` runtime: `createModels()` builds an isolated provider collection with sync model reads (`getModels`/`getModel` return the last-known lists), an explicit async `refresh(provider?)` for dynamic providers, auth resolution (`getAuth`), and `stream`/`complete`/`streamSimple`/`completeSimple` that resolve auth through the owning provider. `createProvider()` builds providers from parts (single API implementation or a map dispatched on `model.api`; static `models` array plus an optional `refreshModels` fetcher with in-flight dedupe); `hasApi()` narrows dynamically listed models.
+- Provider auth substrate: `ProviderAuth` (`{ apiKey?, oauth? }`), one type-tagged credential per provider, `CredentialStore` (`read`/`modify`/`delete` with serialized writes; in-memory default), `envApiKeyAuth()`, `lazyOAuth()`, and injectable `AuthContext`. OAuth refresh runs under the store lock with double-checked expiry; a stored credential owns its provider (no silent env fallback).
+- One provider factory per built-in provider under `@earendil-works/pi-ai/providers/*` (e.g. `anthropicProvider()`, `openrouterProvider()`), plus `@earendil-works/pi-ai/providers/all` with `builtinProviders()`/`builtinModels()` and typed `getBuiltin*` catalog reads. Generated catalogs are split per provider, so importing one provider pulls one catalog; `sideEffects` metadata makes the package tree-shakeable.
+- OAuth flows (Anthropic, OpenAI Codex, GitHub Copilot) gained `OAuthAuth` adapters (`login`/`refresh`/`toAuth`) on unified `prompt()`/`notify()` login callbacks; Copilot's per-credential base URL is derived in `toAuth()`.
+- `fauxProvider()` returns a faux `Provider` for tests built on explicit `Models` collections.
+- Image generation mirrors the chat-side design: `createImagesModels()`/`ImagesProvider`/`createImagesProvider()` with sync model reads, explicit `refresh()`, provider-resolved auth, and never-rejecting `generateImages()`; `openrouterImagesProvider()` factory plus `builtinImagesProviders()`/`builtinImagesModels()` in `providers/all`. The `ImagesProvider` id type alias is renamed to `ImagesProviderId`; the old global image API stays on `/compat`.
+- When Amazon Bedrock rejects an unsupported data retention mode, the error now links the AWS data retention documentation ([#5561](https://github.com/earendil-works/pi/pull/5561) by [@unexge](https://github.com/unexge)).
+
 ### Fixed
 
+- Fixed OpenAI Codex Responses WebSocket sessions to reconnect once when OpenAI's connection limit is reached before output starts ([#5973](https://github.com/earendil-works/pi/issues/5973)).
+- Fixed OpenCode Go GLM-5.2 metadata to expose `xhigh` reasoning and send `reasoning_effort: "max"` ([#5967](https://github.com/earendil-works/pi/issues/5967)).
+- Fixed Claude Fable 5 thinking-off requests to omit Anthropic's unsupported `thinking.type: "disabled"` payload ([#5567](https://github.com/earendil-works/pi/pull/5567) by [@tmustier](https://github.com/tmustier)).
+
+## [0.79.10] - 2026-06-22
+
+### Fixed
+
+- Fixed OpenAI-compatible streaming to preserve encrypted `reasoning_details` that arrive before matching tool call deltas ([#5114](https://github.com/earendil-works/pi/issues/5114)).
+
+## [0.79.9] - 2026-06-20
+
+### Added
+
+- Added configurable `chat-template` thinking support for OpenAI-compatible providers that use `chat_template_kwargs`, such as DeepSeek models behind vLLM ([#5673](https://github.com/earendil-works/pi/issues/5673)).
+
+### Fixed
+
+- Fixed Fireworks GLM-5.2 metadata to use the OpenAI-compatible Chat Completions endpoint with `reasoning_effort` support ([#5923](https://github.com/earendil-works/pi/issues/5923)).
+- Fixed OpenRouter GLM-5.2 metadata to expose `xhigh` reasoning and send OpenRouter's native `xhigh` effort ([#5770](https://github.com/earendil-works/pi/issues/5770)).
+- Fixed GitHub Copilot OAuth model availability to use the authenticated account's model picker catalog ([#5897](https://github.com/earendil-works/pi/issues/5897)).
+
+## [0.79.8] - 2026-06-19
+
+### Added
+
+- Added `@earendil-works/pi-ai/base` and direct provider registration exports for bundlers that want selective provider transports without root built-in registration ([#5348](https://github.com/earendil-works/pi/pull/5348) by [@FredKSchott](https://github.com/FredKSchott)).
+- Added prompt caching for Mistral requests using the pi session ID as `prompt_cache_key`, including cached-token usage and cost accounting ([#5854](https://github.com/earendil-works/pi/issues/5854)).
+- Added the OpenRouter Fusion alias as `openrouter/fusion` ([#5866](https://github.com/earendil-works/pi/pull/5866) by [@dannote](https://github.com/dannote)).
+
+## [0.79.7] - 2026-06-18
+
+### Added
+
+- Added GLM-5.2 model to the OpenCode Go subscription model catalog ([#5860](https://github.com/earendil-works/pi/issues/5860)).
+
+## [0.79.6] - 2026-06-16
+
+### Fixed
+
+- Fixed OpenCode Go DeepSeek V4 thinking-off requests to send the provider's `thinking: { type: "disabled" }` compatibility parameter.
+
+## [0.79.5] - 2026-06-16
+
+### Added
+
+- Added provider-scoped `StreamOptions.env` overrides for provider configuration, including Cloudflare endpoint placeholders, Azure OpenAI, Google Vertex, Amazon Bedrock, cache retention, and proxy environment lookups ([#5728](https://github.com/earendil-works/pi/issues/5728)).
+
+### Fixed
+
+- Fixed OpenAI Responses streaming to tolerate null message content from OpenAI-compatible servers before tool calls ([#5819](https://github.com/earendil-works/pi/issues/5819)).
+- Fixed OpenCode DeepSeek V4 thinking requests to avoid sending both `thinking` and `reasoning_effort` ([#5818](https://github.com/earendil-works/pi/issues/5818)).
+- Fixed Z.AI GLM-5.2 thinking requests to send `reasoning_effort` with the provider's `high`/`max` effort mapping ([#5770](https://github.com/earendil-works/pi/issues/5770)).
+- Fixed Google and `google-vertex` Gemini model metadata to map `latest` aliases to the current models, add Gemini 3.5 Flash for Vertex, correct Gemini 2.5 Flash Vertex cache pricing, and remove shut-down Vertex preview models ([#5761](https://github.com/earendil-works/pi/issues/5761)).
 - Fixed Moonshot AI China model metadata to include Kimi K2.7 Code, and omitted unsupported thinking-off payloads for Kimi K2.7 Code models ([#5760](https://github.com/earendil-works/pi/issues/5760)).
 
 ## [0.79.4] - 2026-06-15
