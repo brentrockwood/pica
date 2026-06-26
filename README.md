@@ -12,6 +12,8 @@
 
 # Pi Agent Harness
 
+This branch is my personal fork of Pi. It keeps the upstream project intact where possible, but includes my local change for fully custom system prompts.
+
 This is the home of the Pi agent harness project including our self extensible coding agent.
 
 * **[@earendil-works/pi-coding-agent](packages/coding-agent)**: Interactive coding agent CLI
@@ -56,6 +58,8 @@ npm run build        # Build all packages
 npm run check        # Lint, format, and type check
 ./test.sh            # Run tests (skips LLM-dependent tests without API keys)
 ./pi-test.sh         # Run pi from sources (can be run from any directory)
+npm run install:pica # Build this fork and install pica/pica-dev into ~/bin
+npm run update:pica  # Pull, rebuild, and reinstall pica/pica-dev
 ```
 
 ## Supply-chain hardening

@@ -34,6 +34,8 @@
 		"release:minor": "node scripts/release.mjs minor",
 		"release:major": "node scripts/release.mjs major",
 		"release:fix-links": "node scripts/release-notes.mjs fix-github-releases",
+		"install:pica": "scripts/install-pica-local.sh",
+		"update:pica": "scripts/update-pica-local.sh",
 		"prepare": "husky"
 	},
 	"devDependencies": {

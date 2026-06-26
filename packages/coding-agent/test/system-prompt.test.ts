@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { buildSystemPrompt } from "../src/core/system-prompt.ts";
 
+const toolsListVariable = "$" + "{toolsList}";
+const guidelinesVariable = "$" + "{guidelines}";
+const readmePathVariable = "$" + "{readmePath}";
+const docsPathVariable = "$" + "{docsPath}";
+const examplesPathVariable = "$" + "{examplesPath}";
+const unknownVariable = "$" + "{unknown}";
+
 describe("buildSystemPrompt", () => {
 	describe("empty tools", () => {
 		test("shows (none) for empty tools list", () => {
@@ -87,9 +94,9 @@ describe("buildSystemPrompt", () => {
 	});
 
 	describe("custom prompt interpolation", () => {
-		test("interpolates ${toolsList} into custom prompt", () => {
+		test(`interpolates ${toolsListVariable} into custom prompt`, () => {
 			const prompt = buildSystemPrompt({
-				customPrompt: "Tools:\n${toolsList}",
+				customPrompt: `Tools:\n${toolsListVariable}`,
 				selectedTools: ["read"],
 				toolSnippets: { read: "Read file contents" },
 				contextFiles: [],
@@ -98,43 +105,43 @@ describe("buildSystemPrompt", () => {
 			});
 
 			expect(prompt).toContain("- read: Read file contents");
-			expect(prompt).not.toContain("${toolsList}");
+			expect(prompt).not.toContain(toolsListVariable);
 		});
 
-		test("interpolates ${guidelines} into custom prompt", () => {
+		test(`interpolates ${guidelinesVariable} into custom prompt`, () => {
 			const prompt = buildSystemPrompt({
-				customPrompt: "Rules:\n${guidelines}",
+				customPrompt: `Rules:\n${guidelinesVariable}`,
 				contextFiles: [],
 				skills: [],
 				cwd: process.cwd(),
 			});
 
 			expect(prompt).toContain("- Be concise");
-			expect(prompt).not.toContain("${guidelines}");
+			expect(prompt).not.toContain(guidelinesVariable);
 		});
 
-		test("interpolates ${readmePath}, ${docsPath}, ${examplesPath} into custom prompt", () => {
+		test(`interpolates ${readmePathVariable}, ${docsPathVariable}, ${examplesPathVariable} into custom prompt`, () => {
 			const prompt = buildSystemPrompt({
-				customPrompt: "Docs: ${readmePath} / ${docsPath} / ${examplesPath}",
+				customPrompt: `Docs: ${readmePathVariable} / ${docsPathVariable} / ${examplesPathVariable}`,
 				contextFiles: [],
 				skills: [],
 				cwd: process.cwd(),
 			});
 
-			expect(prompt).not.toContain("${readmePath}");
-			expect(prompt).not.toContain("${docsPath}");
-			expect(prompt).not.toContain("${examplesPath}");
+			expect(prompt).not.toContain(readmePathVariable);
+			expect(prompt).not.toContain(docsPathVariable);
+			expect(prompt).not.toContain(examplesPathVariable);
 		});
 
 		test("leaves unknown variables unchanged in custom prompt", () => {
 			const prompt = buildSystemPrompt({
-				customPrompt: "Hello ${unknown} world",
+				customPrompt: `Hello ${unknownVariable} world`,
 				contextFiles: [],
 				skills: [],
 				cwd: process.cwd(),
 			});
 
-			expect(prompt).toContain("${unknown}");
+			expect(prompt).toContain(unknownVariable);
 		});
 	});
 
