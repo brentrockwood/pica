@@ -59,7 +59,7 @@ npm run check        # Lint, format, and type check
 ./test.sh            # Run tests (skips LLM-dependent tests without API keys)
 ./pi-test.sh         # Run pi from sources (can be run from any directory)
 npm run install:pica # Build this fork and install pica/pica-dev into ~/bin
-npm run update:pica  # Pull, rebuild, and reinstall pica/pica-dev
+npm run update:pica  # Sync fork from upstream, rebuild, and reinstall pica/pica-dev
 ```
 
 ## Supply-chain hardening

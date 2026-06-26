@@ -41,10 +41,11 @@ npm run update:pica
 
 This runs:
 
-1. `git pull --ff-only`
-2. `npm run install:pica`
+1. syncs local `main` with `upstream/main` from `https://github.com/earendil-works/pi.git`, preserving fork commits with a normal merge when needed
+2. pushes the synced `main` to `origin`
+3. `npm run install:pica`
 
-Use this on machines where the repo already exists and should be updated to the latest fork state.
+This is meant to behave like GitHub's **Sync fork** button. It refuses to run if the worktree is dirty, if you are not on `main`, or if local `main` does not match `origin/main`. If upstream changes conflict with this fork, the merge stops for manual conflict resolution.
 
 ## Command behavior
 
