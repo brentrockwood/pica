@@ -1,0 +1,7 @@
+.git
+.artifacts
+coverage
+node_modules
+**/node_modules
+**/dist
+*.log
