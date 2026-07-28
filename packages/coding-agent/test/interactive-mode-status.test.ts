@@ -129,6 +129,7 @@ describe("InteractiveMode.setToolsExpanded", () => {
 			loadedResourcesContainer: { children: [loadedResourcesChild] },
 			chatContainer: { children: [chatChild] },
 			ui: { requestRender: vi.fn() },
+			showStatus: vi.fn(),
 		};
 
 		(InteractiveMode as any).prototype.setToolsExpanded.call(fakeThis, true);
@@ -137,7 +138,7 @@ describe("InteractiveMode.setToolsExpanded", () => {
 		expect(header.setExpanded).toHaveBeenCalledWith(true);
 		expect(loadedResourcesChild.setExpanded).toHaveBeenCalledWith(true);
 		expect(chatChild.setExpanded).toHaveBeenCalledWith(true);
-		expect(fakeThis.ui.requestRender).toHaveBeenCalledTimes(1);
+		expect(fakeThis.showStatus).toHaveBeenCalledWith("Tool output: expanded");
 	});
 });
 
@@ -1019,6 +1020,84 @@ describe("InteractiveMode.showLoadedResources", () => {
 "[Extensions]
   pi-markdown-preview"`);
 	});
+
+	test("labels npm sibling extensions relative to the declaring package", () => {
+		const extensions: ExtensionFixture[] = [
+			{
+				path: "/tmp/project/.pi/npm/node_modules/primary-package/index.ts",
+				sourceInfo: createSourceInfo("/tmp/project/.pi/npm/node_modules/primary-package/index.ts", {
+					source: "npm:primary-package",
+					scope: "project",
+					origin: "package",
+					baseDir: "/tmp/project/.pi/npm/node_modules/primary-package",
+				}),
+			},
+			{
+				path: "/tmp/project/.pi/npm/node_modules/sibling-package/index.ts",
+				sourceInfo: createSourceInfo("/tmp/project/.pi/npm/node_modules/sibling-package/index.ts", {
+					source: "npm:primary-package",
+					scope: "project",
+					origin: "package",
+					baseDir: "/tmp/project/.pi/npm/node_modules/primary-package",
+				}),
+			},
+		];
+
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: false,
+			extensions,
+			useRealScopeGroups: true,
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+		});
+
+		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
+"[Extensions]
+  primary-package, primary-package:../sibling-package"`);
+	});
+
+	test("labels Windows npm sibling extensions relative to the declaring package", () => {
+		const primaryPath = "C:\\Users\\me\\.pi\\agent\\npm\\node_modules\\primary-package\\index.ts";
+		const siblingPath = "C:\\Users\\me\\.pi\\agent\\npm\\node_modules\\sibling-package\\index.ts";
+		const baseDir = "C:\\Users\\me\\.pi\\agent\\npm\\node_modules\\primary-package";
+		const extensions: ExtensionFixture[] = [
+			{
+				path: primaryPath,
+				sourceInfo: createSourceInfo(primaryPath, {
+					source: "npm:primary-package",
+					scope: "user",
+					origin: "package",
+					baseDir,
+				}),
+			},
+			{
+				path: siblingPath,
+				sourceInfo: createSourceInfo(siblingPath, {
+					source: "npm:primary-package",
+					scope: "user",
+					origin: "package",
+					baseDir,
+				}),
+			},
+		];
+
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: false,
+			extensions,
+			useRealScopeGroups: true,
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+		});
+
+		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
+"[Extensions]
+  primary-package, primary-package:../sibling-package"`);
+	});
+
 	test("captures mixed extension layouts in expanded output", () => {
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
